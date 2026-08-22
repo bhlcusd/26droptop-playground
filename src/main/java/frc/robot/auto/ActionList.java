@@ -1,0 +1,113 @@
+package frc.robot.auto;
+
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.function.Function;
+
+import edu.wpi.first.math.geometry.Pose2d;
+import frc.robot.Enums.StartLocation;
+import frc.robot.superstructure.SS.Flag;
+
+/** Declarative sequence of drive and timed superstructure actions. */
+public class ActionList {
+    public enum ActionType { DRIVE, WAIT }
+    public enum PathingStyle { PRECISE, CONTINUOUS }
+
+    public static class Action {
+        public final ActionType type;
+        public final Waylist waylist;
+        public final double maxVelocity_mps;
+        public final double translation_kP;
+        public final double rotation_kP;
+        public final double timeout_s;
+        public final double minimumDwell_s;
+        public final EnumSet<Flag> flags;
+        public final PathingStyle pathingStyle;
+
+        private Action(ActionType type, Waylist waylist, double maxVelocity_mps, double translation_kP,
+                double rotation_kP, double timeout_s, double minimumDwell_s, EnumSet<Flag> flags,
+                PathingStyle pathingStyle) {
+            this.type = type;
+            this.waylist = waylist;
+            this.maxVelocity_mps = maxVelocity_mps;
+            this.translation_kP = translation_kP;
+            this.rotation_kP = rotation_kP;
+            this.timeout_s = timeout_s;
+            this.minimumDwell_s = minimumDwell_s;
+            this.flags = EnumSet.copyOf(flags);
+            this.pathingStyle = pathingStyle;
+        }
+    }
+
+    private final String name;
+    private final StartLocation startLocation;
+    private final PathingStyle pathingStyle;
+    private final ArrayList<Action> actions = new ArrayList<>();
+    private int index = 0;
+
+    public ActionList(String name, StartLocation startLocation) {
+        this(name, startLocation, PathingStyle.PRECISE);
+    }
+
+    /** Selects whether this routine settles at every waypoint or carries speed through them. */
+    public ActionList(String name, StartLocation startLocation, PathingStyle pathingStyle) {
+        this.name = name;
+        this.startLocation = startLocation;
+        this.pathingStyle = pathingStyle;
+    }
+
+    public ActionList driveToPose(Waylist waylist, double maxVelocity_mps, double translation_kP,
+            double rotation_kP) {
+        return driveToPose(waylist, maxVelocity_mps, translation_kP, rotation_kP, 15.0, 0.0);
+    }
+
+    public ActionList driveToPose(Waylist waylist, double maxVelocity_mps, double translation_kP,
+            double rotation_kP, double timeout_s, double minimumDwell_s, Flag... flags) {
+        actions.add(new Action(ActionType.DRIVE, waylist, maxVelocity_mps, translation_kP, rotation_kP, timeout_s,
+                minimumDwell_s, enumSet(flags), pathingStyle));
+        return this;
+    }
+
+    public ActionList waitFor(double timeout_s, Flag... flags) {
+        actions.add(new Action(ActionType.WAIT, null, 0.0, 0.0, 0.0, timeout_s, 0.0,
+                enumSet(flags), pathingStyle));
+        return this;
+    }
+
+    public ActionList startActions() {
+        actions.add(new Action(ActionType.WAIT, new Waylist(startPose(), 0.1), 0.0, 0.0, 0.0,
+                0.34, 0.0, EnumSet.noneOf(Flag.class), pathingStyle));
+        return this;
+    }
+
+    private static EnumSet<Flag> enumSet(Flag... flags) {
+        EnumSet<Flag> result = EnumSet.noneOf(Flag.class);
+        for (Flag flag : flags) result.add(flag);
+        return result;
+    }
+
+    public void reset() {
+        index = 0;
+        for (Action action : actions) if (action.waylist != null) action.waylist.reset();
+    }
+
+    public void transformWaylists(Function<Pose2d, Pose2d> transform) {
+        for (Action action : actions) {
+            if (action.waylist != null) action.waylist.transformAll(transform);
+        }
+    }
+
+    public Action currentAction() { return index < actions.size() ? actions.get(index) : null; }
+    public void pass() { index++; }
+    public int getIndex() { return index; }
+    public int size() { return actions.size(); }
+    public String getName() { return name; }
+    public StartLocation getStartLocation() { return startLocation; }
+    public Pose2d startPose() {
+        return switch (startLocation) {
+            case LEFT -> PoseBank.LEFT;
+            case CENTER -> PoseBank.CENTER;
+            case RIGHT -> PoseBank.RIGHT;
+        };
+    }
+}

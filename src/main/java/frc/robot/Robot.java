@@ -17,6 +17,9 @@ package frc.robot;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.Threads;
+import edu.wpi.first.wpilibj.DriverStation;
+import frc.robot.auto.Auto;
+import frc.robot.auto.AutoSelector;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.elevator.Elevator;
@@ -46,6 +49,8 @@ public class Robot extends LoggedRobot {
     private ObstacleAvoidance obstacles;
     private SS superstructure;
     private ControlScheme controls;
+    private AutoSelector autoSelector;
+    private Auto auto;
 
 
     @Override
@@ -116,7 +121,12 @@ public class Robot extends LoggedRobot {
     public void robotPeriodic() {
         Threads.setCurrentThreadPriority(true, 99);
 
-        controls.update();
+        if (!DriverStation.isAutonomous()) {
+            controls.update();
+        }
+        if (DriverStation.isAutonomous() && auto != null) {
+            auto.periodic();
+        }
         superstructure.periodic();
         elevator.periodic();
         obstacles.periodic();
@@ -135,11 +145,26 @@ public class Robot extends LoggedRobot {
 
     @Override
     public void disabledPeriodic() {
-
+        autoSelector.periodic();
+        if (OI.DR.getAButtonPressed()) {
+            autoSelector.nextAuto();
+        }
     }
 
     @Override
     public void autonomousInit() {
+        // A simulated camera may still have an observation from the pre-auto pose. Keep that
+        // measurement out of the estimator while Auto establishes the selected start pose.
+        vision.disable();
+        auto = new Auto(autoSelector.getSelected());
+        auto.start();
+        vision.resetPose(drive.getPose());
+        // Photon sim is currently driven from Drive's estimated pose. Fusing those delayed
+        // observations back into the same estimator creates a feedback loop that moves and spins
+        // an otherwise correctly reset autonomous pose. Keep vision available on the real robot.
+        if (Constants.currentMode != Constants.Mode.SIM) {
+            vision.enable();
+        }
     }
 
     @Override
@@ -148,6 +173,7 @@ public class Robot extends LoggedRobot {
 
     @Override
     public void teleopInit() {
+        vision.enable();
         controls.init();
     }
 
@@ -180,6 +206,7 @@ public class Robot extends LoggedRobot {
         tracking = Tracking.getInstance();
         superstructure = SS.getInstance();
         controls = new ControlScheme(superstructure, drive);
+        autoSelector = new AutoSelector();
     }
 
 }

@@ -298,7 +298,11 @@ public class Drive extends StateMachineSubsystemBase<PathingMode> {
 
                 break;
             case POSE_FOLLOWING:
-                ChassisSpeeds poseFollowingSpeeds = runPoseFollowing();
+                // Apply the pose follower output to the speeds consumed by the acceleration
+                // limiters and module output stage. Keeping this as a local variable causes the
+                // robot to remain stationary even though the follower is producing a target.
+                inputSpeeds = runPoseFollowing();
+                requestedSpeeds = inputSpeeds;
                 break;
             case PATH_FOLLOWING:
                 inputSpeeds = autoSpeeds;
@@ -607,9 +611,17 @@ public class Drive extends StateMachineSubsystemBase<PathingMode> {
 
     public void setTargetPose(Pose2d tPose, double maxVel, double translation_kP,
             double rotation_kP) {
+        setTargetPose(tPose, maxVel, translation_kP, rotation_kP, false);
+    }
+
+    /** Commands a target pose, optionally preserving speed across autonomous waypoints. */
+    public void setTargetPose(Pose2d tPose, double maxVel, double translation_kP,
+            double rotation_kP, boolean preserveMomentum) {
         this.targetPose = tPose;
-        this.poseFollower.reset();
-        this.poseFollower.setParams(tPose, maxVel, translation_kP, rotation_kP);
+        if (!preserveMomentum) {
+            this.poseFollower.reset();
+        }
+        this.poseFollower.setParams(tPose, maxVel, translation_kP, rotation_kP, preserveMomentum);
         queueState(PathingMode.POSE_FOLLOWING);
     }
 
@@ -700,6 +712,7 @@ public class Drive extends StateMachineSubsystemBase<PathingMode> {
     }
 
     public void resetGyroAndPose(double gyroAngle, Pose2d currentPose) {
+        clearMotionState();
         double adjustedAngle = adjustForAlliance(gyroAngle);
 
         gyroIO.zero(adjustedAngle);
@@ -712,6 +725,19 @@ public class Drive extends StateMachineSubsystemBase<PathingMode> {
         );
 
         poseEstimator.resetPosition(rawGyroRotation, getModulePositions(), adjustedPose);
+    }
+
+    /** Clears any in-flight chassis command before establishing a new autonomous pose. */
+    private void clearMotionState() {
+        inputSpeeds = new ChassisSpeeds();
+        outputSpeeds = new ChassisSpeeds();
+        acc = new ChassisSpeeds();
+        lastSpeeds = new ChassisSpeeds();
+        measuredAcc = new ChassisSpeeds();
+        autoSpeeds = new ChassisSpeeds();
+        currentAngularVelocity = 0.0;
+        poseFollower.reset();
+        queueState(PathingMode.DISABLED);
     }
 
     public void zeroGyro(double deg) {

@@ -37,6 +37,7 @@ public class PoseFollower {
     // Hang precision mode: uses P-control with a tighter dead zone instead of
     // the default constant-speed + 10cm cutoff. Only affects hang auto-align.
     private boolean hangPrecisionMode = false;
+    private boolean continuous = false;
     private static final double HANG_STOP_DISTANCE = 0.03;  // 3cm dead zone for hang
     
     private double lastVx = 0;
@@ -57,10 +58,16 @@ public class PoseFollower {
     }
 
     public void setParams(Pose2d targetPose, double maxSpeed, double translate_kp, double rotate_kP) {
+        setParams(targetPose, maxSpeed, translate_kp, rotate_kP, false);
+    }
+
+    public void setParams(Pose2d targetPose, double maxSpeed, double translate_kp, double rotate_kP,
+            boolean continuous) {
         this.targetPose = targetPose;
         this.maxSpeed = maxSpeed;
         this.translate_kP = translate_kp;
         this.rotate_kP = rotate_kP;
+        this.continuous = continuous;
     }
     
     /**
@@ -128,7 +135,9 @@ public class PoseFollower {
             double dirY = poseDiff.getY() / distance;
             
             double speed;
-            if (hangPrecisionMode) {
+            if (continuous) {
+                speed = maxSpeed;
+            } else if (hangPrecisionMode) {
                 // P-control: smooth deceleration all the way to 3cm dead zone
                 speed = Util.limit(translate_kP * distance, maxSpeed);
             } else {

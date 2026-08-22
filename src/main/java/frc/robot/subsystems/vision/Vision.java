@@ -15,6 +15,7 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.wpilibj.Timer;
 
 import frc.robot.Constants;
 import frc.robot.devices.limelight.Limelight;
@@ -44,6 +45,7 @@ public class Vision extends SubsystemBase<Vision.Command> {
     private Pose2d fusedPose = null;
     private Pose2d filteredPose = null;
     private int acceptedThisCycle = 0;
+    private double rejectObservationsBefore_s = Double.NEGATIVE_INFINITY;
 
     public static Vision getInstance() {
         if (instance == null) {
@@ -147,6 +149,9 @@ public class Vision extends SubsystemBase<Vision.Command> {
         List<Measurement> measurements = new ArrayList<>();
         for (Limelight limelight : limelights) {
             for (PoseObservation observation : limelight.getPoseObservations()) {
+                if (observation.timestamp() < rejectObservationsBefore_s) {
+                    continue;
+                }
                 if (shouldReject(observation)) {
                     continue;
                 }
@@ -220,6 +225,19 @@ public class Vision extends SubsystemBase<Vision.Command> {
 
     public void disable() {
         setCommand(Command.DISABLED);
+    }
+
+    /**
+     * Aligns vision's filter with an external odometry reset and discards camera frames captured
+     * before that reset. This keeps delayed simulated (or real) observations from pulling the
+     * drivetrain back to its old pose when vision is re-enabled.
+     */
+    public void resetPose(Pose2d pose) {
+        filter.reset(pose);
+        fusedPose = null;
+        filteredPose = pose;
+        rejectObservationsBefore_s = Timer.getFPGATimestamp();
+        Logger.recordOutput("Vision/ResetPose", pose);
     }
 
     /**

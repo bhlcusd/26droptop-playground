@@ -51,8 +51,7 @@ public class Enums {
 
     public enum StartLocation {
         LEFT,
-        CENTER_LEFT,
-        CENTER_RIGHT,
+        CENTER,
         RIGHT
     }
 
