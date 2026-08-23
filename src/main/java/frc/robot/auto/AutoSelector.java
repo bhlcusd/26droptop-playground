@@ -2,6 +2,8 @@ package frc.robot.auto;
 
 import java.util.ArrayList;
 import org.littletonrobotics.junction.Logger;
+
+import frc.robot.auto.routines.PlannedAuto;
 import frc.robot.auto.routines.ReferenceAutos;
 
 /** Holds selectable autonomous routines. */
@@ -10,6 +12,7 @@ public class AutoSelector {
     private int index;
 
     public AutoSelector() {
+        routines.add(PlannedAuto.build());
         routines.add(ReferenceAutos.leftAuto1());
         routines.add(ReferenceAutos.rightAuto1());
         routines.add(ReferenceAutos.leftDisrupt());
@@ -24,6 +27,6 @@ public class AutoSelector {
         ActionList selected = getSelected();
         Logger.recordOutput("Elastic/Selected Auto/Name", selected.getName());
         Logger.recordOutput("Elastic/Selected Auto/Index", index);
-        Logger.recordOutput("Elastic/Selected Auto/Start", selected.getStartLocation().name());
+        Logger.recordOutput("Elastic/Selected Auto/Start", selected.getStartDescription());
     }
 }

@@ -32,7 +32,8 @@ public final class Constants {
     public static final double globalDelta_Hz = 1.0 / globalDelta_s; // 0.02 = 50Hz
 
     private static boolean allianceFound = false;
-    private static boolean isRed = false;
+    // Match the reference frc2k26 project: default to red until DriverStation reports alliance.
+    private static boolean isRed = true;
 
     public static final double FIELD_LENGTH_M = 16.540988;//Units.inchesToMeters(651.22); // 16.540988
     public static final double FIELD_WIDTH_M = 8.069326; //Units.inchesToMeters(317.69);//8.069326;
@@ -43,6 +44,10 @@ public final class Constants {
             allianceFound = true;
         }
         return isRed;
+    }
+
+    public static boolean isBlueAlliance() {
+        return !isRedAlliance();
     }
 
     public static final boolean verboseLogging = true;

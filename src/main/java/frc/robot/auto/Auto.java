@@ -32,11 +32,14 @@ public class Auto extends SubsystemBase<AutoState> {
     /** Resets path progress and odometry, then starts the first action. */
     public void start() {
         actions.reset();
-        if (Constants.isRedAlliance() && !waylistsFlipped) {
+        // Applying the 180-degree field transform twice restores blue coordinates. Tracking the
+        // applied alliance keeps a routine correct if DriverStation reports alliance after startup.
+        boolean redAlliance = Constants.isRedAlliance();
+        if (redAlliance != waylistsFlipped) {
             actions.transformWaylists(pose -> new Pose2d(
                     Constants.FIELD_LENGTH_M - pose.getX(), Constants.FIELD_WIDTH_M - pose.getY(),
                     pose.getRotation().rotateBy(edu.wpi.first.math.geometry.Rotation2d.fromDegrees(180))));
-            waylistsFlipped = true;
+            waylistsFlipped = redAlliance;
         }
         resetStartingPose();
         startAction();

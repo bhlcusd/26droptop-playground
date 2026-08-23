@@ -77,7 +77,7 @@ public class Waylist {
         Pose2d targetEnd = poses.get(targetSegment + 1);
         return new Pose2d(targetStart.getX() + t * (targetEnd.getX() - targetStart.getX()),
                 targetStart.getY() + t * (targetEnd.getY() - targetStart.getY()),
-                targetEnd.getRotation());
+                targetStart.getRotation().interpolate(targetEnd.getRotation(), t));
     }
 
     public boolean isComplete(Pose2d currentPose) {

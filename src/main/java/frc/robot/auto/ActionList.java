@@ -41,6 +41,7 @@ public class ActionList {
 
     private final String name;
     private final StartLocation startLocation;
+    private final Pose2d explicitStartPose;
     private final PathingStyle pathingStyle;
     private final ArrayList<Action> actions = new ArrayList<>();
     private int index = 0;
@@ -53,6 +54,15 @@ public class ActionList {
     public ActionList(String name, StartLocation startLocation, PathingStyle pathingStyle) {
         this.name = name;
         this.startLocation = startLocation;
+        this.explicitStartPose = null;
+        this.pathingStyle = pathingStyle;
+    }
+
+    /** Creates an auto that resets odometry to this exact blue-alliance field pose. */
+    public ActionList(String name, Pose2d startPose, PathingStyle pathingStyle) {
+        this.name = name;
+        this.startLocation = null;
+        this.explicitStartPose = startPose;
         this.pathingStyle = pathingStyle;
     }
 
@@ -103,7 +113,11 @@ public class ActionList {
     public int size() { return actions.size(); }
     public String getName() { return name; }
     public StartLocation getStartLocation() { return startLocation; }
+    public String getStartDescription() {
+        return explicitStartPose == null ? startLocation.name() : "CUSTOM";
+    }
     public Pose2d startPose() {
+        if (explicitStartPose != null) return explicitStartPose;
         return switch (startLocation) {
             case LEFT -> PoseBank.LEFT;
             case CENTER -> PoseBank.CENTER;
