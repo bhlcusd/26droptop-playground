@@ -12,20 +12,13 @@ public final class PlannedAuto {
     public static ActionList build() {
         // The planner's first pose is the odometry reset pose.
         ActionList auto = new ActionList("PLANNED_AUTO",
-                new Pose2d(4.609, 7.442, Rotation2d.fromDegrees(0.0)),
+                new Pose2d(4.755, 7.523, Rotation2d.fromDegrees(0.0)),
                 ActionList.PathingStyle.CONTINUOUS).startActions();
         Waylist path0 = new Waylist(
-                new Pose2d(4.609, 7.442, Rotation2d.fromDegrees(0.0)), 0.1)
-                .append(new Pose2d(8.420, 7.442, Rotation2d.fromDegrees(-89.0)), 0.1)
-                .append(new Pose2d(8.452, 6.140, Rotation2d.fromDegrees(-96.0)), 0.1)
-                .append(new Pose2d(8.371, 5.424, Rotation2d.fromDegrees(-114.0)), 0.1)
-                .append(new Pose2d(8.096, 4.805, Rotation2d.fromDegrees(-153.0)), 0.1)
-                .append(new Pose2d(7.463, 4.480, Rotation2d.fromDegrees(-177.0)), 0.1)
-                .append(new Pose2d(6.798, 4.447, Rotation2d.fromDegrees(140.0)), 0.1)
-                .append(new Pose2d(6.425, 4.757, Rotation2d.fromDegrees(121.0)), 0.1)
-                .append(new Pose2d(6.085, 5.326, Rotation2d.fromDegrees(148.0)), 0.1)
-                .append(new Pose2d(5.517, 5.684, Rotation2d.fromDegrees(-178.0)), 0.1)
-                .append(new Pose2d(2.793, 5.570, Rotation2d.fromDegrees(138.0)), 0.1);
+                new Pose2d(4.755, 7.523, Rotation2d.fromDegrees(0.0)), 0.1)
+                .append(new Pose2d(8.436, 7.361, Rotation2d.fromDegrees(-109.0)), 0.1)
+                .append(new Pose2d(7.788, 5.424, Rotation2d.fromDegrees(-133.0)), 0.1)
+                .append(new Pose2d(7.009, 4.578, Rotation2d.fromDegrees(-159.0)), 0.1);
         auto.driveToPose(path0, 2.5, 2.5, 0.2); // IDLE
 
         return auto;

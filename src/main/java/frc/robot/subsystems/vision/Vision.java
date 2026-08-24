@@ -1,23 +1,18 @@
 package frc.robot.subsystems.vision;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.littletonrobotics.junction.Logger;
 
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.apriltag.AprilTagFields;
-import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
-import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.math.kinematics.ChassisSpeeds;
-import edu.wpi.first.math.numbers.N1;
-import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.wpilibj.Timer;
 
-import frc.robot.Constants;
 import frc.robot.devices.limelight.Limelight;
 import frc.robot.devices.limelight.LimelightConfig;
 import frc.robot.devices.limelight.LimelightIO.LimelightIOInputs.PoseObservation;
@@ -25,6 +20,7 @@ import frc.robot.devices.limelight.LimelightIO.LimelightIOInputs.PoseType;
 import frc.robot.subsystems.SubsystemBase;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.vision.VisionFusion.Measurement;
+import frc.robot.subsystems.vision.PoseKalmanFilter.GateResult;
 
 public class Vision extends SubsystemBase<Vision.Command> {
 
@@ -40,11 +36,21 @@ public class Vision extends SubsystemBase<Vision.Command> {
             AprilTagFieldLayout.loadField(AprilTagFields.kDefaultField);
     private final Drive drive;
     private final PoseKalmanFilter filter = new PoseKalmanFilter(
-            VisionConstants.PROCESS_STD_TRANSLATION_m, VisionConstants.PROCESS_STD_ROTATION_rad);
+            VisionConstants.GATE_PROCESS_STD_TRANSLATION_mPerRootS,
+            VisionConstants.GATE_PROCESS_STD_ROTATION_radPerRootS);
+    private final VisionTrustTracker trustTracker = new VisionTrustTracker(
+            VisionConstants.TRUST_TIME_CONSTANT_s, VisionConstants.TRUST_WARMUP_SAMPLES,
+            VisionConstants.TRUST_MIN_STD_DEV_MULTIPLIER,
+            VisionConstants.TRUST_MAX_STD_DEV_MULTIPLIER);
 
     private Pose2d fusedPose = null;
     private Pose2d filteredPose = null;
     private int acceptedThisCycle = 0;
+    private int gateRejectedThisCycle = 0;
+    private int forwardedThisCycle = 0;
+    private double adaptiveStdDevMultiplier = 1.0;
+    private double visionJitterSigma = 0.0;
+    private boolean trustWarmedUp = false;
     private double rejectObservationsBefore_s = Double.NEGATIVE_INFINITY;
 
     public static Vision getInstance() {
@@ -82,29 +88,58 @@ public class Vision extends SubsystemBase<Vision.Command> {
         fusedPose = null;
         filteredPose = null;
         acceptedThisCycle = 0;
+        gateRejectedThisCycle = 0;
+        forwardedThisCycle = 0;
 
-        // Layer 2 prediction always runs so the filter tracks the robot between vision frames.
-        predictFromOdometry();
-
-        // Layer 1: collect every accepted observation and inverse-variance fuse them.
-        Measurement fused = VisionFusion.fuse(collectMeasurements());
-        if (fused == null || getCommand() == Command.DISABLED) {
+        // Layer 1: only fuse camera frames captured at nearly the same instant. Measurements from
+        // different time windows retain their own timestamps and are handed to WPILib separately.
+        List<Measurement> fusedMeasurements = fuseSynchronousMeasurements(collectMeasurements());
+        if (fusedMeasurements.isEmpty() || getCommand() == Command.DISABLED) {
             filteredPose = filter.isInitialized() ? filter.getEstimate() : null;
             return;
         }
-        fusedPose = fused.pose();
 
-        // Layer 2 correction: pull the filter toward the fused vision pose.
-        filter.update(fused.pose(), fused.varX(), fused.varY(), fused.varTheta());
-        filteredPose = filter.getEstimate();
+        for (Measurement fused : fusedMeasurements) {
+            fusedPose = fused.pose();
+            double stdX = Math.sqrt(fused.varX());
+            double stdY = Math.sqrt(fused.varY());
+            double stdTheta = Math.sqrt(fused.varTheta());
 
-        // Layer 3: hand the filtered pose to the drive pose estimator.
-        drive.addVisionMeasurement(filteredPose, fused.timestamp(), driveStdDevs());
+            // Layer 2 is vision-only. It may reject or de-weight a dubious camera measurement,
+            // but it never creates a second drivetrain pose estimate.
+            GateResult gate = filter.evaluateAndUpdate(
+                    fused.pose(), fused.timestamp(), stdX, stdY, stdTheta,
+                    VisionConstants.GATE_MAX_INNOVATION_SIGMA,
+                    VisionConstants.GATE_MAX_STD_DEV_MULTIPLIER);
+            VisionTrustTracker.TrustResult trust =
+                    trustTracker.observe(fused.timestamp(), gate.innovationSigma());
+            adaptiveStdDevMultiplier = trust.stdDevMultiplier();
+            visionJitterSigma = trust.jitterSigma();
+            trustWarmedUp = trust.warmedUp();
+            if (!gate.accepted()) {
+                gateRejectedThisCycle++;
+                continue;
+            }
+
+            // Layer 3 adapts only covariance based on recent vision consistency. It contributes
+            // no pose or odometry information of its own.
+            double multiplier = gate.stdDevMultiplier() * trust.stdDevMultiplier();
+            drive.addVisionMeasurement(fused.pose(), fused.timestamp(), VecBuilder.fill(
+                    stdX * multiplier, stdY * multiplier, stdTheta * multiplier));
+            forwardedThisCycle++;
+        }
+
+        filteredPose = filter.isInitialized() ? filter.getEstimate() : null;
     }
 
     @Override
     protected void outputPeriodic() {
         Logger.recordOutput("Vision/AcceptedObservations", acceptedThisCycle);
+        Logger.recordOutput("Vision/GateRejectedObservations", gateRejectedThisCycle);
+        Logger.recordOutput("Vision/ForwardedMeasurements", forwardedThisCycle);
+        Logger.recordOutput("Vision/Trust/StdDevMultiplier", adaptiveStdDevMultiplier);
+        Logger.recordOutput("Vision/Trust/JitterSigma", visionJitterSigma);
+        Logger.recordOutput("Vision/Trust/WarmedUp", trustWarmedUp);
         Logger.recordOutput("Vision/HasFusedPose", fusedPose != null);
         if (fusedPose != null) {
             Logger.recordOutput("Vision/FusedPose", fusedPose);
@@ -162,6 +197,30 @@ public class Vision extends SubsystemBase<Vision.Command> {
         return measurements;
     }
 
+    /** Fuses only measurements captured within {@link VisionConstants#FUSION_TIMESTAMP_WINDOW_s}. */
+    private List<Measurement> fuseSynchronousMeasurements(List<Measurement> measurements) {
+        measurements.sort(Comparator.comparingDouble(Measurement::timestamp));
+        List<Measurement> fusedMeasurements = new ArrayList<>();
+        List<Measurement> cluster = new ArrayList<>();
+        double clusterStart_s = Double.NaN;
+
+        for (Measurement measurement : measurements) {
+            if (cluster.isEmpty()) {
+                clusterStart_s = measurement.timestamp();
+            } else if (measurement.timestamp() - clusterStart_s
+                    > VisionConstants.FUSION_TIMESTAMP_WINDOW_s) {
+                fusedMeasurements.add(VisionFusion.fuse(cluster));
+                cluster.clear();
+                clusterStart_s = measurement.timestamp();
+            }
+            cluster.add(measurement);
+        }
+        if (!cluster.isEmpty()) {
+            fusedMeasurements.add(VisionFusion.fuse(cluster));
+        }
+        return fusedMeasurements;
+    }
+
     private boolean shouldReject(PoseObservation observation) {
         if (observation.tagCount() == 0) {
             return true;
@@ -193,30 +252,6 @@ public class Vision extends SubsystemBase<Vision.Command> {
                 observation.timestamp());
     }
 
-    // ---- Layer 2: prediction + std devs handed to the drive ----
-
-    private void predictFromOdometry() {
-        if (!filter.isInitialized()) {
-            return;
-        }
-        ChassisSpeeds robotRelative = drive.getChassisSpeeds();
-        Translation2d fieldVelocity = new Translation2d(
-                robotRelative.vxMetersPerSecond, robotRelative.vyMetersPerSecond)
-                .rotateBy(drive.getRotation());
-        double dt = Constants.globalDelta_s;
-        filter.predict(
-                fieldVelocity.getX() * dt,
-                fieldVelocity.getY() * dt,
-                robotRelative.omegaRadiansPerSecond * dt);
-    }
-
-    private Matrix<N3, N1> driveStdDevs() {
-        double stdX = Math.max(filter.getStdDevX(), VisionConstants.MIN_DRIVE_STD_TRANSLATION_m);
-        double stdY = Math.max(filter.getStdDevY(), VisionConstants.MIN_DRIVE_STD_TRANSLATION_m);
-        double stdTheta = Math.max(filter.getStdDevTheta(), VisionConstants.MIN_DRIVE_STD_ROTATION_rad);
-        return VecBuilder.fill(stdX, stdY, stdTheta);
-    }
-
     // ---- Public API ----
 
     public void enable() {
@@ -228,24 +263,27 @@ public class Vision extends SubsystemBase<Vision.Command> {
     }
 
     /**
-     * Aligns vision's filter with an external odometry reset and discards camera frames captured
-     * before that reset. This keeps delayed simulated (or real) observations from pulling the
-     * drivetrain back to its old pose when vision is re-enabled.
+     * Clears vision history and discards camera frames captured before an external odometry reset.
+     * The next new camera observation establishes a new vision-only gate reference.
      */
     public void resetPose(Pose2d pose) {
-        filter.reset(pose);
+        filter.clear();
+        trustTracker.clear();
         fusedPose = null;
-        filteredPose = pose;
+        filteredPose = null;
+        adaptiveStdDevMultiplier = 1.0;
+        visionJitterSigma = 0.0;
+        trustWarmedUp = false;
         rejectObservationsBefore_s = Timer.getFPGATimestamp();
         Logger.recordOutput("Vision/ResetPose", pose);
     }
 
     /**
-     * Tune how quickly the filtered pose chases the vision target. Larger values move the estimate
-     * toward the fused limelight pose faster; smaller values lean on odometry.
+     * Tune how much legitimate motion the vision-only quality gate tolerates between frames.
      */
-    public void setResponsiveness(double processStdTranslation_m, double processStdRotation_rad) {
-        filter.setProcessNoise(processStdTranslation_m, processStdRotation_rad);
+    public void setResponsiveness(double processStdTranslation_mPerRootS,
+            double processStdRotation_radPerRootS) {
+        filter.setProcessNoise(processStdTranslation_mPerRootS, processStdRotation_radPerRootS);
     }
 
     public boolean hasFusedPose() {

@@ -46,14 +46,29 @@ public final class VisionConstants {
     /** Sim only: cameras can't detect tags farther than this. */
     public static final double SIM_MAX_SIGHT_RANGE_m = 5.0;
 
-    // ---- Layer 2: Kalman process noise (per loop) ----
-    // This is the responsiveness knob: larger process noise makes the filtered pose converge to
-    // the fused vision pose faster; smaller makes it lean on odometry and move there slowly.
-    public static final double PROCESS_STD_TRANSLATION_m = 0.10;
-    public static final double PROCESS_STD_ROTATION_rad = Units.degreesToRadians(8.0);
+    // ---- Layer 2: vision-only quality gate ----
+    // Process noise is in units per sqrt(second). It lets the gate tolerate legitimate robot
+    // motion between camera frames without using wheel odometry as a second input.
+    public static final double GATE_PROCESS_STD_TRANSLATION_mPerRootS = 0.70;
+    public static final double GATE_PROCESS_STD_ROTATION_radPerRootS = Units.degreesToRadians(56.0);
 
-    // Floor on the std devs handed to the drive pose estimator, so a converged filter never
-    // reports zero uncertainty.
-    public static final double MIN_DRIVE_STD_TRANSLATION_m = 0.01;
-    public static final double MIN_DRIVE_STD_ROTATION_rad = Units.degreesToRadians(0.5);
+    /** Reject a camera measurement if it differs from recent vision by more than this many sigma. */
+    public static final double GATE_MAX_INNOVATION_SIGMA = 4.0;
+
+    /** Near the gate threshold, inflate the measurement std dev by up to this multiplier. */
+    public static final double GATE_MAX_STD_DEV_MULTIPLIER = 2.0;
+
+    // ---- Layer 3: adaptive trust from recent vision consistency ----
+    /** Time horizon over which vision jitter affects dynamic measurement trust. */
+    public static final double TRUST_TIME_CONSTANT_s = 0.75;
+
+    /** Do not tighten measurement uncertainty until this many fresh camera samples are observed. */
+    public static final int TRUST_WARMUP_SAMPLES = 10;
+
+    /** Hard limits on Layer 3's multiplier of Layer 1's camera standard deviations. */
+    public static final double TRUST_MIN_STD_DEV_MULTIPLIER = 0.75;
+    public static final double TRUST_MAX_STD_DEV_MULTIPLIER = 2.0;
+
+    /** Only camera observations captured this close together may be fused into one measurement. */
+    public static final double FUSION_TIMESTAMP_WINDOW_s = 0.020;
 }

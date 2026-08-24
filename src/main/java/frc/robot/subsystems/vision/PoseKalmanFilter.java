@@ -5,77 +5,127 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 
 /**
- * Layer 2 of pose estimation: a minimal diagonal Kalman filter over robot pose (x, y, theta).
+ * Vision-only filter used to assess the consistency of consecutive camera measurements.
  *
- * <p>The prediction step is driven by the drive's odometry delta; the correction step pulls the
- * estimate toward the inverse-variance-fused limelight pose ({@link VisionFusion}). Process noise
- * controls responsiveness — larger process noise grows the estimate covariance faster, raising the
- * Kalman gain so the estimate chases the vision measurement more quickly.
+ * <p>This filter intentionally does not consume drivetrain odometry. The drivetrain's
+ * {@code SwerveDrivePoseEstimator} is the sole pose estimator that combines wheel/gyro odometry
+ * with vision. Keeping this filter vision-only avoids feeding a second, correlated pose estimate
+ * back into that estimator.
  */
 public class PoseKalmanFilter {
+
+    /** Result of testing one camera measurement against recent vision history. */
+    public record GateResult(boolean accepted, double stdDevMultiplier, boolean updated,
+            double innovationSigma) {}
 
     private double x;
     private double y;
     private double theta;
 
-    // Estimate variances (diagonal covariance).
+    // Diagonal covariance for this vision-only history.
     private double px;
     private double py;
     private double pTheta;
 
-    // Process noise (variance) added each prediction.
-    private double qx;
-    private double qy;
-    private double qTheta;
+    // Process variance added per second. Units are m^2/s and rad^2/s.
+    private double qxPerSecond;
+    private double qyPerSecond;
+    private double qThetaPerSecond;
 
+    private double lastTimestamp_s = Double.NaN;
     private boolean initialized = false;
 
-    public PoseKalmanFilter(double processStdTranslation_m, double processStdRotation_rad) {
-        setProcessNoise(processStdTranslation_m, processStdRotation_rad);
+    public PoseKalmanFilter(double processStdTranslation_mPerRootS,
+            double processStdRotation_radPerRootS) {
+        setProcessNoise(processStdTranslation_mPerRootS, processStdRotation_radPerRootS);
     }
 
-    /** Set the per-loop process noise. Larger values make the estimate converge to vision faster. */
-    public void setProcessNoise(double stdTranslation_m, double stdRotation_rad) {
-        this.qx = stdTranslation_m * stdTranslation_m;
-        this.qy = this.qx;
-        this.qTheta = stdRotation_rad * stdRotation_rad;
+    /**
+     * Sets process standard deviations in units per square-root second. Larger values allow the
+     * vision history to move farther between camera frames before it rejects an observation.
+     */
+    public void setProcessNoise(double stdTranslation_mPerRootS,
+            double stdRotation_radPerRootS) {
+        qxPerSecond = stdTranslation_mPerRootS * stdTranslation_mPerRootS;
+        qyPerSecond = qxPerSecond;
+        qThetaPerSecond = stdRotation_radPerRootS * stdRotation_radPerRootS;
     }
 
-    public boolean isInitialized() {
-        return initialized;
+    /** Clears history so the next accepted vision observation establishes a new reference. */
+    public void clear() {
+        initialized = false;
+        lastTimestamp_s = Double.NaN;
     }
 
-    public void reset(Pose2d pose) {
+    /**
+     * Checks and records a measurement at its image-capture timestamp.
+     *
+     * <p>Repeated or out-of-order measurements are dropped. This prevents a NetworkTables value
+     * that is unchanged across several robot loops from being fused into WPILib repeatedly.
+     */
+    public GateResult evaluateAndUpdate(Pose2d measurement, double timestamp_s,
+            double stdX_m, double stdY_m, double stdTheta_rad, double maxInnovationSigma,
+            double maxStdDevMultiplier) {
+        if (!initialized) {
+            reset(measurement, timestamp_s, stdX_m, stdY_m, stdTheta_rad);
+            return new GateResult(true, 1.0, true, 0.0);
+        }
+
+        if (timestamp_s <= lastTimestamp_s) {
+            return new GateResult(false, 1.0, false, Double.NaN);
+        }
+
+        predictTo(timestamp_s);
+
+        double innovationX = measurement.getX() - x;
+        double innovationY = measurement.getY() - y;
+        double innovationTheta = MathUtil.angleModulus(measurement.getRotation().getRadians() - theta);
+
+        double sigmaX = Math.sqrt(px + stdX_m * stdX_m);
+        double sigmaY = Math.sqrt(py + stdY_m * stdY_m);
+        double sigmaTheta = Math.sqrt(pTheta + stdTheta_rad * stdTheta_rad);
+        double normalizedInnovation = Math.max(
+                Math.abs(innovationX) / sigmaX,
+                Math.max(Math.abs(innovationY) / sigmaY, Math.abs(innovationTheta) / sigmaTheta));
+
+        if (normalizedInnovation > maxInnovationSigma) {
+            return new GateResult(false, 1.0, false, normalizedInnovation);
+        }
+
+        // Near the gate threshold, keep the observation but make its handoff to WPILib less
+        // influential. The original camera pose/timestamp are still preserved.
+        double multiplier = Math.min(maxStdDevMultiplier,
+                1.0 + normalizedInnovation / maxInnovationSigma * (maxStdDevMultiplier - 1.0));
+        double adjustedStdX = stdX_m * multiplier;
+        double adjustedStdY = stdY_m * multiplier;
+        double adjustedStdTheta = stdTheta_rad * multiplier;
+        update(measurement, adjustedStdX * adjustedStdX, adjustedStdY * adjustedStdY,
+                adjustedStdTheta * adjustedStdTheta);
+        return new GateResult(true, multiplier, true, normalizedInnovation);
+    }
+
+    private void reset(Pose2d pose, double timestamp_s, double stdX_m, double stdY_m,
+            double stdTheta_rad) {
         x = pose.getX();
         y = pose.getY();
         theta = pose.getRotation().getRadians();
-        px = 0.0;
-        py = 0.0;
-        pTheta = 0.0;
+        px = stdX_m * stdX_m;
+        py = stdY_m * stdY_m;
+        pTheta = stdTheta_rad * stdTheta_rad;
+        lastTimestamp_s = timestamp_s;
         initialized = true;
     }
 
-    public void predict(double dx, double dy, double dTheta) {
-        if (!initialized) {
-            return;
-        }
-        x += dx;
-        y += dy;
-        theta += dTheta;
-        px += qx;
-        py += qy;
-        pTheta += qTheta;
+    /** No motion model: this gate relies only on independent camera history. */
+    private void predictTo(double timestamp_s) {
+        double dt_s = timestamp_s - lastTimestamp_s;
+        px += qxPerSecond * dt_s;
+        py += qyPerSecond * dt_s;
+        pTheta += qThetaPerSecond * dt_s;
+        lastTimestamp_s = timestamp_s;
     }
 
-    public void update(Pose2d measurement, double rx, double ry, double rTheta) {
-        if (!initialized) {
-            reset(measurement);
-            px = rx;
-            py = ry;
-            pTheta = rTheta;
-            return;
-        }
-
+    private void update(Pose2d measurement, double rx, double ry, double rTheta) {
         double kx = px / (px + rx);
         double ky = py / (py + ry);
         double kTheta = pTheta / (pTheta + rTheta);
@@ -89,19 +139,11 @@ public class PoseKalmanFilter {
         pTheta *= (1.0 - kTheta);
     }
 
+    public boolean isInitialized() {
+        return initialized;
+    }
+
     public Pose2d getEstimate() {
         return new Pose2d(x, y, new Rotation2d(theta));
-    }
-
-    public double getStdDevX() {
-        return Math.sqrt(px);
-    }
-
-    public double getStdDevY() {
-        return Math.sqrt(py);
-    }
-
-    public double getStdDevTheta() {
-        return Math.sqrt(pTheta);
     }
 }
