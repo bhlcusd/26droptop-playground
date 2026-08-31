@@ -15,7 +15,7 @@ import frc.robot.superstructure.SS.Flag;
 /** Runs one {@link ActionList} using the drivetrain pose follower. */
 public class Auto extends SubsystemBase<AutoState> {
     private static final double LOOKAHEAD_m = 1.2;
-    private static final double CONTINUOUS_ADVANCE_DISTANCE_m = 0.6;
+    private static final double COMPLETION_TOLERANCE_m = 0.1;
 
     private final Drive drive = Drive.getInstance();
     private final SS superstructure = SS.getInstance();
@@ -75,7 +75,8 @@ public class Auto extends SubsystemBase<AutoState> {
         switch (getCommand()) {
             case DRIVE -> handleDrive();
             case WAIT -> {
-                if (commandTimer.time() >= actions.currentAction().timeout_s) advance();
+                Action waitAction = actions.currentAction();
+                if (waitAction == null || commandTimer.time() >= waitAction.timeout_s) advance();
             }
             case FINISHED, IDLE, DISABLED -> { }
         }
@@ -110,9 +111,9 @@ public class Auto extends SubsystemBase<AutoState> {
         }
 
         action.waylist.updateBlended(drive.getPose());
-        double completionDistance_m = action.pathingStyle == ActionList.PathingStyle.CONTINUOUS
-                ? CONTINUOUS_ADVANCE_DISTANCE_m : 0.1;
-        if (!action.waylist.isComplete(drive.getPose(), completionDistance_m)) {
+        // Pathing style controls how targets are followed, not how accurately an action ends.
+        // In particular, a continuous action must not hand off before it reaches its final pose.
+        if (!action.waylist.isComplete(drive.getPose(), COMPLETION_TOLERANCE_m)) {
             completionStart_s = -1.0;
             commandDrive(action);
         } else if (completionStart_s < 0.0) {
