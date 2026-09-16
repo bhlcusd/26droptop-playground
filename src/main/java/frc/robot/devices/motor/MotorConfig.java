@@ -13,6 +13,24 @@ public class MotorConfig {
         ARM
     }
 
+    public enum MeasurementUnit {
+        METERS("_m", "_mps", "_mps2"),
+        DEGREES("_deg", "_degps", "_degps2"),
+        ROTATIONS("_rot", "_rotps", "_rotps2"),
+        RADIANS("_rad", "_radps", "_radps2"),
+        NONE("", "", "");
+
+        public final String positionSuffix;
+        public final String velocitySuffix;
+        public final String accelerationSuffix;
+
+        MeasurementUnit(String positionSuffix, String velocitySuffix, String accelerationSuffix) {
+            this.positionSuffix = positionSuffix;
+            this.velocitySuffix = velocitySuffix;
+            this.accelerationSuffix = accelerationSuffix;
+        }
+    }
+
     public int canId;
     public String canbus = "rio";
     public Integer followerId = null;
@@ -37,6 +55,8 @@ public class MotorConfig {
     public double mmCruiseVelocity = 0.0;
     public double mmAcceleration = 0.0;
     public double mmJerk = 0.0;
+
+    public MeasurementUnit measurementUnit = MeasurementUnit.NONE;
 
     public DCMotor simMotor = DCMotor.getKrakenX60Foc(1);
     public double simGearing = 1.0;
@@ -79,6 +99,11 @@ public class MotorConfig {
 
     public MotorConfig withSensorToMechanismRatio(double ratio) {
         this.sensorToMechanismRatio = ratio;
+        return this;
+    }
+
+    public MotorConfig withMeasurementUnit(MeasurementUnit measurementUnit) {
+        this.measurementUnit = measurementUnit;
         return this;
     }
 

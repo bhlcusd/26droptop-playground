@@ -25,12 +25,14 @@ public class Motor {
     private final String name;
     private final MotorIO io;
     private final MotorIOInputsAutoLogged inputs = new MotorIOInputsAutoLogged();
+    private final MotorConfig.MeasurementUnit measurementUnit;
 
     private ControlType control = ControlType.STOP;
     private double target = 0.0;
 
     public Motor(String name, MotorConfig config, Mode mode) {
         this.name = name;
+        this.measurementUnit = config.measurementUnit;
         if (mode == Mode.REAL) {
             this.io = new MotorIOTalonFX(config);
         } else {
@@ -45,6 +47,13 @@ public class Motor {
     public void readInputs() {
         io.updateInputs(inputs);
         Logger.processInputs(name, inputs);
+        Logger.recordOutput(name + "/MeasurementUnit", measurementUnit.name());
+
+        if (measurementUnit != MotorConfig.MeasurementUnit.NONE) {
+            Logger.recordOutput(name + "/Position" + measurementUnit.positionSuffix, inputs.position);
+            Logger.recordOutput(name + "/Velocity" + measurementUnit.velocitySuffix, inputs.velocity);
+            Logger.recordOutput(name + "/Acceleration" + measurementUnit.accelerationSuffix, inputs.acceleration);
+        }
     }
 
     private void setOutput(ControlType control, double target) {
@@ -120,6 +129,10 @@ public class Motor {
 
     public boolean isConnected() {
         return inputs.connected;
+    }
+
+    public MotorConfig.MeasurementUnit getMeasurementUnit() {
+        return measurementUnit;
     }
 
     public ControlType getControl() {

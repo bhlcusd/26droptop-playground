@@ -69,6 +69,7 @@ public class Elevator extends SubsystemBase<Elevator.Command> {
                 .withBrake(BRAKE)
                 .withSupplyCurrentLimit(SUPPLY_CURRENT_LIMIT_A)
                 .withSensorToMechanismRatio(METERS_TO_ROTATIONS)
+                .withMeasurementUnit(MotorConfig.MeasurementUnit.METERS)
                 .withFFGains(kS, kV, kA, kG)
                 .withPIDGains(kP, kI, kD, GRAVITY)
                 .withMotionMagic(MM_CRUISE_VELOCITY, MM_ACCELERATION, MM_JERK)
