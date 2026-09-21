@@ -22,8 +22,7 @@ import frc.robot.auto.Auto;
 import frc.robot.auto.AutoSelector;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.drive.Drive;
-import frc.robot.subsystems.elevator.Elevator;
-import frc.robot.subsystems.obstacles.ObstacleAvoidance;
+// import frc.robot.subsystems.obstacles.ObstacleAvoidance;
 import frc.robot.subsystems.tracking.Tracking;
 import frc.robot.subsystems.vision.Vision;
 import frc.robot.superstructure.SS;
@@ -43,11 +42,10 @@ import com.ctre.phoenix6.swerve.SwerveModuleConstants.SteerMotorArrangement;
 public class Robot extends LoggedRobot {
 
     private Drive drive;
-    private Elevator elevator;
-    private Vision vision;
-    private Tracking tracking;
-    private ObstacleAvoidance obstacles;
-    private SS superstructure;
+    // private Vision vision;
+    // private Tracking tracking;
+    // private ObstacleAvoidance obstacles;
+    // private SS superstructure;
     private ControlScheme controls;
     private AutoSelector autoSelector;
     private Auto auto;
@@ -95,7 +93,7 @@ public class Robot extends LoggedRobot {
 
         instantiateSubsystems();
 
-        vision.enable();
+        // vision.enable();
 
         var modules = new SwerveModuleConstants[] {
                 TunerConstants.FrontLeft,
@@ -127,12 +125,14 @@ public class Robot extends LoggedRobot {
         if (DriverStation.isAutonomous() && auto != null) {
             auto.periodic();
         }
-        superstructure.periodic();
-        elevator.periodic();
-        obstacles.periodic();
-        tracking.periodic();
+        // superstructure.periodic();
+        // obstacles.periodic();
+        // tracking.periodic();
         drive.periodic();
-        vision.periodic();
+        // vision.periodic();
+
+        // Logger.recordOutput("Practice/Cone1", new Pose2d(7.3, 1.8, new Rotation2d(0)));
+        // Logger.recordOutput("Practice/Cone2", new Pose2d(8.8, 1.8, new Rotation2d(0)));
 
         PerfTracker.periodic();
         Threads.setCurrentThreadPriority(false, 10);
@@ -155,15 +155,15 @@ public class Robot extends LoggedRobot {
     public void autonomousInit() {
         // A simulated camera may still have an observation from the pre-auto pose. Keep that
         // measurement out of the estimator while Auto establishes the selected start pose.
-        vision.disable();
+        // vision.disable();
         auto = new Auto(autoSelector.getSelected());
         auto.start();
-        vision.resetPose(drive.getPose());
+        // vision.resetPose(drive.getPose());
         // Photon sim is currently driven from Drive's estimated pose. Fusing those delayed
         // observations back into the same estimator creates a feedback loop that moves and spins
         // an otherwise correctly reset autonomous pose. Keep vision available on the real robot.
         if (Constants.currentMode != Constants.Mode.SIM) {
-            vision.enable();
+            // vision.enable();
         }
     }
 
@@ -173,7 +173,8 @@ public class Robot extends LoggedRobot {
 
     @Override
     public void teleopInit() {
-        vision.enable();
+        // vision.enable();
+        // vision.disable();
         controls.init();
     }
 
@@ -199,13 +200,12 @@ public class Robot extends LoggedRobot {
 
     
     public void instantiateSubsystems() {
-        elevator = Elevator.getInstance();
-        obstacles = ObstacleAvoidance.getInstance();
+        // obstacles = ObstacleAvoidance.getInstance();
         drive = Drive.getInstance();
-        vision = Vision.getInstance();
-        tracking = Tracking.getInstance();
-        superstructure = SS.getInstance();
-        controls = new ControlScheme(superstructure, drive);
+        // vision = Vision.getInstance();
+        // tracking = Tracking.getInstance();
+        // superstructure = SS.getInstance();
+        controls = new ControlScheme(drive);
         autoSelector = new AutoSelector();
     }
 

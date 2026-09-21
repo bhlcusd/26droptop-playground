@@ -1,26 +1,177 @@
-1. kG (gravity) — start here, everything else builds on it.
-- Arm: move it to horizontal. Slowly raise voltage until it just barely holds still (doesn't fall, doesn't rise). That voltage = kG.
-- Elevator: same, at any height — the volts that make it hover without drifting up or down.
-- Check: with kG set and GravityType configured, the mechanism should roughly float in place at 0 PID.
+SWERVE DRIVETRAIN TUNING GUIDE
+===============================
 
-2. kS (static friction).
-- From a dead stop, on top of kG, slowly increase voltage until the mechanism just barely starts to creep. The extra voltage beyond kG that breaks it loose is kS.
-- It's usually small (your elevator's is 0.07).
+Tune in this order. Do not use PID or anti-skew to conceal a mechanical, wiring,
+CAN, encoder, or inversion fault. Bench-test modules with the robot supported, then
+move to an open space for driving tests. Change one value per test and record results.
 
-3. kV (velocity) — the important one.
-- Command a steady voltage that gets it moving at a nice constant speed. Let it settle to constant velocity, then read the actual velocity.
-- Compute: kV = (applied_volts − kS − kG) / measured_velocity.
-- Do this at 2–3 different voltages and average — you should get roughly the same kV each time. It's "volts per unit of speed."
-- Units check: velocity must be in the same units your commands use (rotations/s for an arm, m/s for your elevator).
+SAFETY
+------
+1. Keep the Driver Station disable control immediately available.
+2. Support the robot securely for individual-module tests.
+3. Check main breaker, battery, motor-controller power, and CAN wiring.
+4. Begin all first-motion tests with conservative speed and acceleration limits.
 
-4. kA (acceleration) — usually skip it.
-- Leave 0 to start. Only add it if, after PID tuning, the mechanism lags during hard accelerations. It's hard to hand-tune; SysId is the real way to get it.
+PROJECT SETTINGS
+----------------
+- IDs, CAN bus, ratios, wheel radius, offsets, and initial gains:
+  src/main/java/frc/robot/generated/TunerConstants.java
+- Controller port and deadband: src/main/java/frc/robot/OI.java
+- Drive limits, field-relative driving, acceleration, and anti-skew:
+  src/main/java/frc/robot/subsystems/drive/Drive.java
+- TalonFX / CANcoder configuration:
+  src/main/java/frc/robot/devices/swervemodule/SwerveModuleIOTalonFX.java
 
-5. kP (proportional) — now add PID to correct leftover error.
-- Command a real position target with Motion Magic. Start kP at 0 and increase until the mechanism tracks the target snappily.
-- Too low: sluggish, settles short of target. Too high: oscillates/buzzes around the target.
-- Back off to just below where oscillation starts.
+1. CAN BUS AND DEVICE IDENTITY
+------------------------------
+Use Phoenix Tuner X before tuning motion.
 
-6. kD (derivative) — damping.
-- If kP alone overshoots or oscillates, add a little kD to damp it. Raise until overshoot is gone and motion is crisp.
-- kI is almost always left 0 — only add a tiny amount if it consistently settles near but never at the target.
+[ ] All drive TalonFXs, steer TalonFXs, CANcoders, and the Pigeon appear.
+[ ] No duplicate IDs, device faults, brownouts, or unacceptable CAN utilization.
+[ ] Devices are on the bus named in TunerConstants. This code uses "canivore";
+    either use that named CANivore or change the configured bus to match hardware.
+[ ] Motor-controller power and CAN are not intermittently disconnecting.
+
+Module       Drive ID    Steer ID    CANcoder ID
+Front Left      4           3            11
+Front Right     6           5            12
+Back Left       8           7            13
+Back Right     10           9            14
+
+2. MECHANICAL BASELINE
+----------------------
+[ ] Equal wheel/tread condition and securely tightened wheels, pinions, and modules.
+[ ] No significant steer backlash, binding, or loose bevel gears.
+[ ] Code's actual drive ratio, steer ratio, and loaded wheel radius match hardware.
+[ ] Each disabled module can be steered by hand without abnormal resistance.
+
+3. CANcoder OFFSETS
+-------------------
+Bad offsets cause crooked driving, random flips, and anti-skew problems.
+
+1. Disable outputs and point every wheel physically straight forward using a straightedge.
+2. In Phoenix Tuner X, read each absolute CANcoder position.
+3. Set that module's EncoderOffset in TunerConstants so reported angle is 0 degrees
+   when the wheel points forward.
+4. Deploy/reboot. Verify all reported angles are still 0 degrees.
+5. Move each module around +90, -90, and 180 degrees. Reported angle must match the
+   physical angle continuously and in the correct direction.
+
+Offsets establish physical zero only. Never change an offset to fix a backward drive wheel.
+
+4. STEERING DIRECTION AND GAINS
+-------------------------------
+With wheels raised, command each module to 0, +90, -90, and 180 degrees.
+
+[ ] Positive angle is counterclockwise viewed from above.
+[ ] Module takes the short path to its target.
+[ ] A commanded angle is held without runaway, buzz, or large overshoot.
+
+If displayed and physical angles move opposite directions, fix CANcoder direction or steer
+inversion. Do not tune around it.
+
+Steer gain process:
+1. Start kI = 0 and kD = 0.
+2. Increase steer kP until a 90-degree step becomes quick but starts to overshoot/buzz.
+3. Reduce kP about 20 percent.
+4. Add only enough kD to remove remaining overshoot.
+5. Retest all angles and with wheels on carpet.
+
+5. DRIVE DIRECTION
+------------------
+Command a low forward output with every module physically straight.
+
+[ ] All wheels drive the robot forward.
+[ ] Drive encoder velocity is positive when its module drives forward.
+[ ] If one wheel is backward, correct that module's drive inversion.
+[ ] If a whole side disagrees, inspect left/right inversion plus physical gearbox orientation.
+
+6. GYRO AND FIELD-RELATIVE CONTROL
+-----------------------------------
+1. Robot still: yaw is stable and matches physical heading.
+2. Rotate counterclockwise by hand: yaw increases.
+3. Zero yaw, then confirm it reports near zero.
+4. Drive forward, rotate robot 90 degrees, and drive forward again. Field-relative drive
+   should retain the same field direction.
+5. If robot-relative drive works but field-relative does not, fix gyro configuration or
+   zeroing before any further drivetrain tuning.
+
+7. WHEEL RADIUS AND ODOMETRY SCALE
+----------------------------------
+1. On carpet, drive slowly over a measured straight distance several times.
+2. Compare physical and reported odometry distances.
+3. Update radius using:
+
+   newRadius = oldRadius * actualDistance / reportedDistance
+
+4. Repeat in both directions and average. Confirm actual drive/steer gear reductions too.
+
+8. DRIVER CONTROLS
+------------------
+[ ] Driver controller is connected to the configured port (currently USB port 0).
+[ ] Forward/reverse, strafe, and rotation signs are correct.
+[ ] Increase DEADBAND_RADIUS only enough to remove drift; start at 0.05 to 0.08.
+[ ] Tune with reduced max speed first, then restore match speed.
+
+9. DRIVE VELOCITY CONTROL (ONLY IF YOU ENABLE IT)
+-------------------------------------------------
+This project normally applies open-loop drive voltage. If you convert it to closed-loop
+velocity control, tune in this order: kS, kV, kA, kP, kD.
+
+- kS: voltage that just starts wheel movement.
+- kV: steady-state volts / steady-state wheel speed.
+- kA: use SysId where possible; otherwise start at zero.
+- kP: raise until velocity response is prompt, then back off before oscillation.
+- kD: add only to damp oscillation. Leave kI at zero unless repeatable steady error remains.
+
+10. ACCELERATION AND TRACTION
+-----------------------------
+Test sharp forward/reverse, strafe, and diagonal transitions.
+
+- If wheels spin, chassis lurches, or brownouts occur, reduce MAX_FORWARD_ACC_mps2 and/or
+  MAX_SKID_ACC_mps2 in Drive.java.
+- If stable but slow, increase gradually.
+- Test with a realistic battery, full robot mass, and actual carpet.
+
+11. ANTI-SKEW: DRIVING WHILE TURNING
+------------------------------------
+kSkew in Drive.java compensates for steering lag only when translating and rotating at
+the same time. It is not a fix for bad offsets, inversion, loose hardware, or gyro faults.
+
+1. Set real-robot kSkew = 0 first. Verify pure straight drive and pure rotation work.
+2. In open space, command steady forward speed plus steady rotation.
+3. Observe the unwanted sideways/path error.
+4. Current starting value is -0.002. Change only 0.001 at a time.
+5. If the error gets worse, reverse its sign. If it improves, increase magnitude gradually.
+6. Test forward/reverse and clockwise/counterclockwise. Choose the smallest value that
+   improves all cases, not a value that perfects one case only.
+
+If a large error remains with kSkew = 0, return to offsets, inversion, steer response,
+module backlash, and traction.
+
+12. FINAL ACCEPTANCE TESTS
+--------------------------
+[ ] Modules hold targets without vibration.
+[ ] Forward/reverse, left/right strafe, and diagonal travel are straight.
+[ ] Pure rotation occurs about robot center.
+[ ] Translation plus rotation is repeatable without excessive skew.
+[ ] Gyro/field-relative control is correct.
+[ ] Odometry agrees with measured distance and heading.
+[ ] Reboot preserves module zeros and CAN connectivity.
+[ ] No active motor, encoder, CAN, brownout, or undervoltage faults.
+
+RECORD SHEET
+------------
+Date / battery voltage:
+Carpet / wheel condition:
+Wheel radius:
+Drive ratio:
+Steer ratio:
+FL / FR / BL / BR offsets:
+Steer kP / kD:
+Drive kS / kV / kA / kP / kD:
+Max linear velocity:
+Max forward acceleration:
+Max skid acceleration:
+Real kSkew:
+Notes / test result:
