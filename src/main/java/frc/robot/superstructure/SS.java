@@ -3,8 +3,6 @@ package frc.robot.superstructure;
 import frc.robot.ControlScheme;
 import frc.robot.subsystems.SubsystemBase;
 import frc.robot.subsystems.drive.Drive;
-import frc.robot.subsystems.elevator.Elevator;
-import frc.robot.subsystems.elevator.ElevatorConstants;
 
 import java.util.EnumSet;
 
@@ -42,10 +40,8 @@ public class SS extends SubsystemBase<SS.Command> {
 
     private final EnumSet<Flag> flags = EnumSet.noneOf(Flag.class);
 
-    private final Elevator elevator;
     private final Drive drive;
 
-    private double scoreTarget_m = ElevatorConstants.MIN_HEIGHT_m;
 
     public static SS getInstance() {
         if (instance == null) {
@@ -56,7 +52,6 @@ public class SS extends SubsystemBase<SS.Command> {
 
     private SS() {
         super("Superstructure");
-        elevator = Elevator.getInstance();
         drive = Drive.getInstance();
         setCommand(Command.IDLE);
     }
@@ -98,10 +93,8 @@ public class SS extends SubsystemBase<SS.Command> {
         } else if (has(Flag.MANUAL_UP) || has(Flag.MANUAL_DOWN)) {
             setCommand(Command.MANUAL);
         } else if (has(Flag.SCORE_HIGH)) {
-            scoreTarget_m = ElevatorConstants.MAX_HEIGHT_m;
             setCommand(Command.SCORING);
         } else if (has(Flag.SCORE_LOW)) {
-            scoreTarget_m = SCORE_LOW_HEIGHT_m;
             setCommand(Command.SCORING);
         } else {
             setCommand(Command.STOWING);
@@ -109,52 +102,18 @@ public class SS extends SubsystemBase<SS.Command> {
 
         switch (getCommand()) {
             case HOMING:
-                elevator.home();
                 break;
             case MANUAL:
-                elevator.manual(has(Flag.MANUAL_UP) ? MANUAL_VOLTS : -MANUAL_VOLTS);
                 break;
             case SCORING:
-                handleScoring();
                 break;
             case STOWING:
-                elevator.trackToHeight(ElevatorConstants.MIN_HEIGHT_m);
                 break;
             case IDLE:
                 break;
         }
     }
 
-    private void handleScoring() {
-        if (firstLoop()) {
-            setSubstate(Scoring.RAISING);
-        }
-
-        switch ((Scoring) getSubstate()) {
-            case RAISING:
-                elevator.trackToHeight(scoreTarget_m);
-                if (elevator.atTarget(ElevatorConstants.TOLERANCE_m)) {
-                    setSubstate(Scoring.SETTLING);   
-                }
-                break;
-
-            case SETTLING:
-                elevator.trackToHeight(scoreTarget_m);
-                if (!elevator.atTarget(ElevatorConstants.TOLERANCE_m)) {
-                    setSubstate(Scoring.RAISING);    
-                } else if (substateElapsed(SETTLE_TIME_s)) {
-                    setSubstate(Scoring.READY);    
-                }
-                break;
-
-            case READY:
-                elevator.trackToHeight(scoreTarget_m);
-                if (!elevator.atTarget(ElevatorConstants.TOLERANCE_m)) {
-                    setSubstate(Scoring.RAISING);   
-                }
-                break;
-        }
-    }
 
     @Override
     protected void outputPeriodic() {

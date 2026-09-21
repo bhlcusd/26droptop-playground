@@ -48,7 +48,7 @@ import frc.robot.Constants.Mode;
 import frc.robot.devices.swervemodule.SwerveModule;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.StateMachineSubsystemBase;
-import frc.robot.subsystems.obstacles.ObstacleAvoidance;
+// import frc.robot.subsystems.obstacles.ObstacleAvoidance;
 import frc.robot.subsystems.tracking.Tracking;
 import frc.robot.util.ChassisAcceleration;
 import frc.robot.util.Util;
@@ -343,14 +343,14 @@ public class Drive extends StateMachineSubsystemBase<PathingMode> {
         //
         // -0.002 is this robot's existing real value and is untouched/unverified; the real geared
         // steer has more lag than sim, so this likely wants tuning ON the robot, not in sim.
-        double kSkew = RobotBase.isSimulation() ? -0.0095 : -0.002;
+        double kSkew = RobotBase.isSimulation() ? -0.0095 : -0.045;
 
         outputSpeeds.vxMetersPerSecond += px * outputSpeeds.omegaRadiansPerSecond * kSkew;
         outputSpeeds.vyMetersPerSecond += py * outputSpeeds.omegaRadiansPerSecond * kSkew;
 
         // Last thing before we command the modules: let obstacle avoidance cap the speed so the robot
         // can always brake before a wall. It only ever slows us down.
-        outputSpeeds = ObstacleAvoidance.getInstance().constrain(getPose(), outputSpeeds);
+        // outputSpeeds = ObstacleAvoidance.getInstance().constrain(getPose(), outputSpeeds);
 
         // Log speeds and accelerations
         Logger.recordOutput("Drive/Speeds/Input", new ChassisSpeeds(si.xi, si.yi, si.wi));

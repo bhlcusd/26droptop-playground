@@ -105,6 +105,22 @@ public class SwerveModule {
 
     public void outputPeriodic(Mode mode) {
 
+        // Log requested outputs in the same physical units used by the drivetrain setpoints.
+        // The raw Module inputs expose drive velocity in rotations/sec, which is otherwise easy
+        // to accidentally compare directly against these meters/sec values.
+        Logger.recordOutput("Drive/Module" + Integer.toString(index) + "/DriveSetpointMps",
+                driveSetpoint_mps);
+        Logger.recordOutput("Drive/Module" + Integer.toString(index) + "/DriveMeasuredMps",
+                getVelocityMetersPerSec());
+        Logger.recordOutput("Drive/Module" + Integer.toString(index) + "/DriveCommandVolts",
+                12.0 * driveSetpoint_mps / constants.SpeedAt12Volts);
+        Logger.recordOutput("Drive/Module" + Integer.toString(index) + "/SteerSetpointDeg",
+                steerSetpoint_Rot2d == null ? Double.NaN : steerSetpoint_Rot2d.getDegrees());
+        Logger.recordOutput("Drive/Module" + Integer.toString(index) + "/SteerMeasuredDeg",
+                inputs.steerAbsPos_Rot2d.getDegrees());
+        Logger.recordOutput("Drive/Module" + Integer.toString(index) + "/SteerRelativeDeg",
+                getAngle().getDegrees());
+
         // Run closed loop turn control
         if (steerSetpoint_Rot2d != null) {
             io.setTurnPosition(steerSetpoint_Rot2d);
