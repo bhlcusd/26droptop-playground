@@ -4,14 +4,17 @@ import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.drive.PathingMode;
 import frc.robot.subsystems.drive.PathingOverride;
 import frc.robot.subsystems.drive.SwerveInput;
+import frc.robot.superstructure.SS;
+import frc.robot.superstructure.SS.Flag;
 import frc.robot.util.Util;
-
 
 public class ControlScheme {
 
+    private final SS ss;
     private final Drive drive;
 
-    public ControlScheme(Drive drive) {
+    public ControlScheme(SS ss, Drive drive) {
+        this.ss = ss;
         this.drive = drive;
     }
 
@@ -33,5 +36,9 @@ public class ControlScheme {
         }
         drive.setInput(new SwerveInput(x_, y_, w_, throttle));
 
+        ss.set(Flag.IDLE, OI.DR.getXButtonPressed());
+        ss.set(Flag.DISABLE, OI.DR.getYButtonPressed());
+        ss.set(Flag.RAISE, OI.DR.getAButtonPressed());
+        ss.set(Flag.LOWER, OI.DR.getBButtonPressed());
     }
 }

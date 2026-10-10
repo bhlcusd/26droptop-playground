@@ -2,6 +2,8 @@ package frc.robot.superstructure;
 
 import frc.robot.ControlScheme;
 import frc.robot.subsystems.SubsystemBase;
+import frc.robot.subsystems.arm.Arm;
+import frc.robot.subsystems.arm.ArmConstants;
 import frc.robot.subsystems.drive.Drive;
 
 import java.util.EnumSet;
@@ -11,25 +13,19 @@ import org.littletonrobotics.junction.Logger;
 public class SS extends SubsystemBase<SS.Command> {
 
     public enum Flag {
-        HOME,
-        SCORE_LOW,
-        SCORE_HIGH,
-        MANUAL_UP,
-        MANUAL_DOWN
+        IDLE,
+        DISABLE,
+        RAISE,
+        LOWER
     }
 
     public enum Command {
         IDLE,
-        HOMING,
+        DISABLE,
+        TRAVEL,
         STOWING,
         SCORING,
         MANUAL
-    }
-
-    private enum Scoring {
-        RAISING,
-        SETTLING,
-        READY
     }
 
     private static final double MANUAL_VOLTS = 2.0;
@@ -40,8 +36,10 @@ public class SS extends SubsystemBase<SS.Command> {
 
     private final EnumSet<Flag> flags = EnumSet.noneOf(Flag.class);
 
+    private final Arm arm;
     private final Drive drive;
 
+    private double targetAngle_deg;
 
     public static SS getInstance() {
         if (instance == null) {
@@ -52,6 +50,7 @@ public class SS extends SubsystemBase<SS.Command> {
 
     private SS() {
         super("Superstructure");
+        arm = Arm.getInstance();
         drive = Drive.getInstance();
         setCommand(Command.IDLE);
     }
@@ -82,26 +81,34 @@ public class SS extends SubsystemBase<SS.Command> {
     }
 
     @Override
-    protected void inputPeriodic() {
-        
-    }
+    protected void inputPeriodic() {}
 
     @Override
     protected void handle() {
-        if (has(Flag.HOME)) {
-            setCommand(Command.HOMING);
-        } else if (has(Flag.MANUAL_UP) || has(Flag.MANUAL_DOWN)) {
-            setCommand(Command.MANUAL);
-        } else if (has(Flag.SCORE_HIGH)) {
-            setCommand(Command.SCORING);
-        } else if (has(Flag.SCORE_LOW)) {
-            setCommand(Command.SCORING);
+        // Temp, realistically you would pull arm angle from another subsystem or array of pre-defined angles
+        if (has(Flag.RAISE)) {
+            this.targetAngle_deg = ArmConstants.MAX_ANGLE_deg;
+            setCommand(Command.TRAVEL);
+        } else if (has(Flag.LOWER)) {
+            this.targetAngle_deg = ArmConstants.MIN_ANGLE_deg;
+            setCommand(Command.TRAVEL);
+        } else if (has(Flag.IDLE)) {
+            setCommand(Command.IDLE);
+        } else if (has(Flag.DISABLE)) {
+            setCommand(Command.DISABLE);
         } else {
             setCommand(Command.STOWING);
         }
 
         switch (getCommand()) {
-            case HOMING:
+            case IDLE:
+                arm.idle();
+                break;
+            case DISABLE:
+                arm.disable();
+                break;
+            case TRAVEL:
+                handleTravel();
                 break;
             case MANUAL:
                 break;
@@ -109,11 +116,19 @@ public class SS extends SubsystemBase<SS.Command> {
                 break;
             case STOWING:
                 break;
-            case IDLE:
+            default:
                 break;
         }
     }
 
+    public void handleTravel() {
+        if (arm.atRotationTarget()) {
+            setCommand(Command.IDLE);
+            return;
+        }
+
+        arm.rotateTo(targetAngle_deg);
+    }
 
     @Override
     protected void outputPeriodic() {

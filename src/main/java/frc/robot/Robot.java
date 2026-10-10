@@ -21,6 +21,7 @@ import edu.wpi.first.wpilibj.DriverStation;
 import frc.robot.auto.Auto;
 import frc.robot.auto.AutoSelector;
 import frc.robot.generated.TunerConstants;
+import frc.robot.subsystems.arm.Arm;
 import frc.robot.subsystems.drive.Drive;
 // import frc.robot.subsystems.obstacles.ObstacleAvoidance;
 import frc.robot.subsystems.tracking.Tracking;
@@ -45,11 +46,11 @@ public class Robot extends LoggedRobot {
     // private Vision vision;
     // private Tracking tracking;
     // private ObstacleAvoidance obstacles;
-    // private SS superstructure;
+    private SS superstructure;
     private ControlScheme controls;
     private AutoSelector autoSelector;
     private Auto auto;
-
+    private Arm arm;
 
     @Override
     public void robotInit() {
@@ -125,7 +126,8 @@ public class Robot extends LoggedRobot {
         if (DriverStation.isAutonomous() && auto != null) {
             auto.periodic();
         }
-        // superstructure.periodic();
+        superstructure.periodic();
+        arm.periodic();
         // obstacles.periodic();
         // tracking.periodic();
         drive.periodic();
@@ -204,9 +206,10 @@ public class Robot extends LoggedRobot {
         drive = Drive.getInstance();
         // vision = Vision.getInstance();
         // tracking = Tracking.getInstance();
-        // superstructure = SS.getInstance();
-        controls = new ControlScheme(drive);
+        superstructure = SS.getInstance();
+        controls = new ControlScheme(superstructure, drive);
         autoSelector = new AutoSelector();
+        arm = Arm.getInstance();
     }
 
 }
