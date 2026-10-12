@@ -40,7 +40,8 @@ public class Arm extends SubsystemBase<Arm.Command> {
 			.withBrake(BRAKE)
 			.withFFGains(kS, kV, kA, kG)
 			.withPIDGains(kP, kI, kD, GRAVITY_TYPE)
-			.withMotionMagic(CRUISE_VELOCITY_rps, ACCELERATION_rps2, JERK_rps3);
+			.withMotionMagic(CRUISE_VELOCITY_rps, ACCELERATION_rps2, JERK_rps3)
+			.withSim(MOTOR, GEARING, MOI_kgm2);
 
 		this.motor = new Motor("Arm/motor", config);
 
@@ -114,6 +115,7 @@ public class Arm extends SubsystemBase<Arm.Command> {
 	@Override
 	protected void outputPeriodic() {
 		arm2d.setAngle(getAngle());
+		arm2d.periodic();
 
 		Logger.recordOutput("Arm/Angle_deg", getAngle());
 		Logger.recordOutput("Arm/RotationalVelocity", getRotationalVelocity());

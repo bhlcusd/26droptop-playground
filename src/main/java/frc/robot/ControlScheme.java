@@ -36,9 +36,9 @@ public class ControlScheme {
         }
         drive.setInput(new SwerveInput(x_, y_, w_, throttle));
 
-        ss.set(Flag.IDLE, OI.DR.getXButtonPressed());
-        ss.set(Flag.DISABLE, OI.DR.getYButtonPressed());
-        ss.set(Flag.RAISE, OI.DR.getAButtonPressed());
-        ss.set(Flag.LOWER, OI.DR.getBButtonPressed());
+        ss.set(Flag.IDLE, OI.DR.getXButton());
+        ss.set(Flag.DISABLE, OI.DR.getYButton());
+        ss.set(Flag.RAISE, OI.DR.getAButton());
+        ss.set(Flag.LOWER, OI.DR.getBButton());
     }
 }

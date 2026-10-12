@@ -5,6 +5,7 @@ import frc.robot.subsystems.SubsystemBase;
 import frc.robot.subsystems.arm.Arm;
 import frc.robot.subsystems.arm.ArmConstants;
 import frc.robot.subsystems.drive.Drive;
+import frc.robot.util.Util;
 
 import java.util.EnumSet;
 
@@ -122,7 +123,7 @@ public class SS extends SubsystemBase<SS.Command> {
     }
 
     public void handleTravel() {
-        if (arm.atRotationTarget()) {
+        if (Util.inRange(this.targetAngle_deg - arm.getAngle(), ArmConstants.TOLERANCE_deg)) {
             setCommand(Command.IDLE);
             return;
         }
@@ -134,5 +135,6 @@ public class SS extends SubsystemBase<SS.Command> {
     protected void outputPeriodic() {
         String[] active = flags.stream().map(Enum::name).toArray(String[]::new);
         Logger.recordOutput("Superstructure/Flags", active);
+        Logger.recordOutput("Superstructure/Command", getCommand());
     }
 }
